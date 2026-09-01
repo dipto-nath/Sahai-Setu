@@ -44,7 +44,11 @@ class GeminiResponse(BaseModel):
     vulnerability: GeminiIndicatorSeverity
     urgency: GeminiIndicatorSeverity
     human_review_recommended: bool
+    is_prank_or_spam: bool
     explanation: str
+    summary: str
+    care: str
+    action: str
 
 
 @dataclass
@@ -115,6 +119,7 @@ Categories:
 5. vulnerability: Socio-economic vulnerability, illiteracy, lack of legal awareness, or systemic power imbalances.
 6. urgency: Need for immediate police protection, medical assistance, or FIR registration under the PoA Act.
 7. human_review_recommended: Whether a human officer must prioritize this case immediately.
+8. is_prank_or_spam: CRITICAL FLAG — set to true if this statement is clearly a joke, prank, spam, test call, or non-emergency complaint rather than a genuine atrocity. Trivial complaints that mention "help" or "police" but are about a stolen chips packet, missing pizza, food delivery gone wrong, lost trivial items of negligible monetary value (e.g. "5 rs", "10 rupees"), a tiffin, a cycle, or a playful/humorous tone must be flagged. When in doubt, prefer false (treat as genuine).
 
 Output strictly valid JSON with this exact schema:
 {{
@@ -125,7 +130,11 @@ Output strictly valid JSON with this exact schema:
   "vulnerability": {{"severity": "none|low|moderate|high|critical", "confidence": 0.0}},
   "urgency": {{"severity": "none|low|moderate|high|critical", "confidence": 0.0}},
   "human_review_recommended": true|false,
-  "explanation": "Brief explanation based only on detected communication and contextual indicators"
+  "is_prank_or_spam": true|false,
+  "explanation": "Brief explanation based only on detected communication and contextual indicators",
+  "summary": "1-sentence summary of the victim's core situation",
+  "care": "1-sentence psychological care instruction for the officer",
+  "action": "1-sentence tactical action instruction for the officer"
 }}
 
 Return ONLY the JSON. No markdown, no backticks, no commentary."""
@@ -156,6 +165,10 @@ Return ONLY the JSON. No markdown, no backticks, no commentary."""
         threat_score = 0.0
         isolation_score = 0.0
         urgency_score = 0.0
+
+        # Detect obvious prank/spam/junk complaints so the override path
+        # works even when the real Gemini API is unavailable.
+        is_prank = self._looks_like_prank(text_lower)
 
         # Simple keyword-based mock
         fear_words = ["afraid", "scared", "terrified", "fear", "ভয়", "डर"]
@@ -189,17 +202,94 @@ Return ONLY the JSON. No markdown, no backticks, no commentary."""
                 return "low"
             return "none"
 
-        overall = max(fear_score, distress_score, threat_score, isolation_score, urgency_score)
+        fear_sev = sev(fear_score)
+        dist_sev = sev(distress_score)
+        threat_sev = sev(threat_score)
+        iso_sev = sev(isolation_score)
+        urg_sev = sev(urgency_score)
+
         return {
-            "fear": {"severity": sev(fear_score), "confidence": fear_score or 0.1},
-            "distress": {"severity": sev(distress_score), "confidence": distress_score or 0.1},
-            "threat_context": {"severity": sev(threat_score), "confidence": threat_score or 0.1},
-            "social_isolation": {"severity": sev(isolation_score), "confidence": isolation_score or 0.1},
-            "vulnerability": {"severity": sev(overall * 0.7), "confidence": round(overall * 0.7, 2) or 0.1},
-            "urgency": {"severity": sev(urgency_score), "confidence": urgency_score or 0.1},
-            "human_review_recommended": overall >= 0.5,
-            "explanation": "Mock analysis based on keyword detection. This is a prototype demo response, NOT validated clinical analysis."
+            "fear": {"severity": fear_sev, "confidence": min(1.0, fear_score or 0.1)},
+            "distress": {"severity": dist_sev, "confidence": min(1.0, distress_score or 0.1)},
+            "threat_context": {"severity": threat_sev, "confidence": min(1.0, threat_score or 0.1)},
+            "social_isolation": {"severity": iso_sev, "confidence": min(1.0, isolation_score or 0.1)},
+            "vulnerability": {"severity": "moderate", "confidence": 0.5},
+            "urgency": {"severity": urg_sev, "confidence": min(1.0, urgency_score or 0.1)},
+            "human_review_recommended": (threat_score > 0.6 or distress_score > 0.7) and not is_prank,
+            "is_prank_or_spam": is_prank,
+            "explanation": (
+                "Mock analysis: input flagged as a non-emergency / prank / spam. "
+                "SVI will be overridden to LOW. This is a prototype demo response, "
+                "NOT validated clinical analysis."
+            ) if is_prank else (
+                "Mock analysis based on keyword heuristics. This is a prototype "
+                "demo response, NOT validated clinical analysis."
+            ),
+            "summary": (
+                "Caller statement appears to be a prank / non-emergency complaint."
+                if is_prank else
+                "Victim reported an incident requiring attention."
+            ),
+            "care": (
+                "No trauma-support routing required; log and close if no other signals."
+                if is_prank else
+                "Listen carefully and validate the victim's experience."
+            ),
+            "action": (
+                "Mark as prank/spam and do not allocate officer resources."
+                if is_prank else
+                "Ask for specific details regarding the incident and any immediate threats."
+            ),
         }
+
+    @staticmethod
+    def _looks_like_prank(text_lower: str) -> bool:
+        """
+        Heuristic that mirrors the Local NLP fallback so the override works
+        even in demo mode. Conservative on purpose: only obvious junk
+        complaints are flagged.
+        """
+        if not text_lower:
+            return False
+        strong_prank_signals = [
+            "stolen my chips",
+            "stole my chips",
+            "stole my packet",
+            "stolen chips packet",
+            "stolen chips",
+            "stole my pizza",
+            "missing pizza",
+            "lorry here as soon as possible",
+            "send a police lorry",
+            "send a lorry",
+            "this is a joke",
+            "this is a prank",
+            "just kidding",
+            "testing the helpline",
+            "test call",
+            "wrong number",
+            "pizza delivery",
+            "swiggy",
+            "zomato order",
+            "missing my tiffin",
+        ]
+        for phrase in strong_prank_signals:
+            if phrase in text_lower:
+                return True
+        trivial_money = re.search(
+            r"\b(stolen|lost|missing)\b.*?\b([1-9]{0,2}\d?)\s*(rs|rupees|inr|₹)\b",
+            text_lower,
+        )
+        police_kw = re.search(r"\b(police|cop|cops|lorry|pcr)\b", text_lower)
+        if trivial_money and police_kw:
+            atrocity_signals = [
+                "caste", "sc/st", "sc st", "atrocity", "rape", "acid attack",
+                "tribal", "dalit", "untouchability", "slur",
+                "forced displacement",
+            ]
+            if not any(s in text_lower for s in atrocity_signals):
+                return True
+        return False
 
     async def analyze(self, text: str, language: str = "en") -> GeminiResult:
         """

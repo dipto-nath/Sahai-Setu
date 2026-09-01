@@ -80,7 +80,41 @@ export interface Assessment {
   risk_level: RiskLevel;
   confidence: number;
   assessment_status: AssessmentStatus;
+  // Backend stores these as JSON-encoded strings; the frontend parses
+  // them on demand (see parseExplanation).
+  explanation_json?: string | null;
+  analysis_json?: string | null;
   created_at: string;
+}
+
+// Structured shape of the Gemini explanation JSON that the backend
+// stores in assessments.explanation_json.
+export interface AssessmentExplanation {
+  summary?: string;
+  care?: string;
+  action?: string;
+}
+
+// Safely parse an Assessment.explanation_json field, returning an empty
+// object if it's missing, null, or malformed JSON. Never throws.
+export function parseExplanation(
+  raw?: string | null,
+): AssessmentExplanation {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        summary:
+          typeof parsed.summary === 'string' ? parsed.summary : undefined,
+        care: typeof parsed.care === 'string' ? parsed.care : undefined,
+        action: typeof parsed.action === 'string' ? parsed.action : undefined,
+      };
+    }
+  } catch {
+    // Fall through to return empty object.
+  }
+  return {};
 }
 
 export type AssessmentStatus = 'COMPLETED' | 'REVIEW_RECOMMENDED' | 'INCONCLUSIVE';

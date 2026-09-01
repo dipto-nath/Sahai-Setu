@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 import uuid
 import logging
+import json
 
 from app.models.cases import Case, CaseStatus, RiskLevel
 from app.models.interactions import Interaction, InputType
@@ -239,6 +240,12 @@ class CaseService:
                 risk_level=RiskLevel(result["risk_level"]).value,
                 confidence=result["confidence"],
                 assessment_status=result["assessment_status"],
+                analysis_json=json.dumps(result.get("gemini_response", {})) if "gemini_response" in result else None,
+                explanation_json=json.dumps({
+                    "summary": result.get("gemini_response", {}).get("summary", ""),
+                    "care": result.get("gemini_response", {}).get("care", ""),
+                    "action": result.get("gemini_response", {}).get("action", "")
+                }) if "gemini_response" in result else None,
                 created_at=datetime.utcnow()
             )
             db.add(assessment)
@@ -428,7 +435,7 @@ class CaseService:
 
             return {
                 "case": to_dict(case, ['id', 'anonymous_case_id', 'language', 'status', 'risk_level', 'svi', 'confidence', 'assigned_user_id', 'created_at', 'updated_at']),
-                "assessment": to_dict(assessment, ['id', 'case_id', 'text_score', 'audio_score', 'context_score', 'threat_score', 'distress_score', 'final_svi', 'risk_level', 'confidence', 'assessment_status', 'created_at', 'updated_at']) if assessment else None,
+                "assessment": to_dict(assessment, ['id', 'case_id', 'text_score', 'audio_score', 'context_score', 'threat_score', 'distress_score', 'final_svi', 'risk_level', 'confidence', 'assessment_status', 'explanation_json', 'analysis_json', 'created_at', 'updated_at']) if assessment else None,
                 "indicators": [to_dict(i, ['id', 'name', 'severity', 'confidence', 'source', 'created_at']) for i in indicators],
                 "recommendations": [to_dict(r, ['id', 'type', 'priority', 'reason', 'status', 'created_at']) for r in recommendations],
                 "reviews": [to_dict(r, ['id', 'ai_risk', 'human_risk', 'decision', 'notes', 'reviewer_id', 'created_at']) for r in reviews],

@@ -8,6 +8,34 @@ import type {
   AssessmentResult, DashboardData, ReviewCreate, LanguageOption
 } from '@/types';
 
+// Shape returned by GET /api/cases/{id}. Matches the backend's
+// CaseDetailResponse (case_service.get_case_details).
+export interface CaseDetailsResponse {
+  case: Case;
+  assessment: {
+    id: number;
+    case_id: number;
+    text_score?: number | null;
+    audio_score?: number | null;
+    context_score?: number | null;
+    threat_score?: number | null;
+    distress_score?: number | null;
+    final_svi?: number | null;
+    risk_level?: import('@/types').RiskLevel;
+    confidence?: number | null;
+    assessment_status: import('@/types').AssessmentStatus;
+    // JSON-encoded strings from the backend.
+    explanation_json?: string | null;
+    analysis_json?: string | null;
+    created_at: string;
+    updated_at: string;
+  } | null;
+  indicators: any[];
+  recommendations: any[];
+  reviews: any[];
+  interactions: any[];
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 class ApiService {
@@ -109,6 +137,15 @@ class ApiService {
     if (riskLevel) params.append('risk_level', riskLevel);
 
     const response = await this.client.get<Case[]>(`/cases?${params.toString()}`);
+    return response.data;
+  }
+
+  // Fetch full case details (case, latest assessment, indicators,
+  // recommendations, reviews, interactions) for a single case.
+  // The returned `assessment.explanation_json` is the JSON-encoded
+  // string produced by Gemini — use parseExplanation() to read it.
+  async getCaseDetails(caseId: number): Promise<CaseDetailsResponse> {
+    const response = await this.client.get<CaseDetailsResponse>(`/cases/${caseId}`);
     return response.data;
   }
 

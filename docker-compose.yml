@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: nhaa-postgres
+    environment:
+      POSTGRES_DB: nhaa_triage
+      POSTGRES_USER: nhaa_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nhaa_secure_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nhaa_user -d nhaa_triage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nhaa-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nhaa-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://nhaa_user:${DB_PASSWORD:-nhaa_secure_password}@postgres:5432/nhaa_triage
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      DEMO_MODE: "true"
+      CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000"]'
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      # AI Model Configuration
+      NLP_MODEL_NAME: ${NLP_MODEL_NAME:-}
+      SPEECH_MODEL_NAME: ${SPEECH_MODEL_NAME:-}
+      AI_PROVIDER: ${AI_PROVIDER:-local}
+      AI_API_KEY: ${AI_API_KEY:-}
+      # Model paths (for local models)
+      WHISPER_MODEL_PATH: /models/whisper
+      NLP_MODEL_PATH: /models/nlp
+    volumes:
+      - ./backend:/app
+      - model_cache:/root/.cache/huggingface
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nhaa-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nhaa-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - nhaa-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  model_cache:
+
+networks:
+  nhaa-network:
+    driver: bridge

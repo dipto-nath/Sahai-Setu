@@ -1,0 +1,36 @@
+{
+  "risk_thresholds": {
+    "LOW": {
+      "min": 0,
+      "max": 24,
+      "label": "LOW",
+      "description": "Low stress/vulnerability indicators detected"
+    },
+    "MODERATE": {
+      "min": 25,
+      "max": 49,
+      "label": "MODERATE",
+      "description": "Moderate stress/vulnerability indicators detected"
+    },
+    "HIGH": {
+      "min": 50,
+      "max": 74,
+      "label": "HIGH",
+      "description": "High stress/vulnerability indicators detected"
+    },
+    "CRITICAL": {
+      "min": 75,
+      "max": 100,
+      "label": "CRITICAL",
+      "description": "Critical stress/vulnerability indicators detected"
+    }
+  },
+  "confidence_thresholds": {
+    "HIGH": 0.80,
+    "MEDIUM": 0.50,
+    "LOW": 0.30,
+    "inconclusive_threshold": 0.50
+  },
+  "version": "1.0.0",
+  "note": "Prototype-configured thresholds requiring domain-expert validation. NOT clinically validated."
+}

@@ -1,0 +1,16 @@
+{
+  "voice_interaction": {
+    "text_nlp_weight": 0.40,
+    "context_nlp_weight": 0.35,
+    "audio_weight": 0.25,
+    "description": "Weights for multimodal fusion in voice interactions"
+  },
+  "text_only_interaction": {
+    "text_nlp_weight": 0.35,
+    "context_nlp_weight": 0.65,
+    "audio_weight": 0.0,
+    "description": "Weights for multimodal fusion in text-only interactions"
+  },
+  "version": "1.0.0",
+  "note": "Prototype weights - NOT clinically validated. Require domain-expert validation."
+}

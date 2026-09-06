@@ -156,7 +156,7 @@ export default function LiveCallPage() {
     // Save live case if transcript exists
     if (transcript && transcript.length > 5) {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('auth_token');
         const headers: Record<string, string> = {
           'Content-Type': 'application/json'
         };

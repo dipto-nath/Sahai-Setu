@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     demo_mode: bool = True
     
     # Database
-    database_url: str = Field(default="postgresql://nhaa_user:nhaa_password@localhost:5432/nhaa_triage")
+    database_url: str = Field(default="sqlite:///./nhaa_triage.db")
     
     # JWT Authentication
     jwt_secret: str = Field(default="your-super-secret-jwt-key-change-in-production")

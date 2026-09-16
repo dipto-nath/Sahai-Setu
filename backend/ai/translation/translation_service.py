@@ -1,7 +1,6 @@
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import asyncio
-from transformers import MarianMTModel, MarianTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -9,8 +8,8 @@ class TranslationService:
     """Service to dynamically load Helsinki-NLP MarianMT models and translate to English"""
     
     def __init__(self):
-        self._models: Dict[str, MarianMTModel] = {}
-        self._tokenizers: Dict[str, MarianTokenizer] = {}
+        self._models: Dict[str, Any] = {}
+        self._tokenizers: Dict[str, Any] = {}
         
         # Mapping from source lang code to huggingface model name
         self._model_map = {
@@ -22,6 +21,12 @@ class TranslationService:
         if source_lang not in self._model_map:
             raise ValueError(f"No translation model mapping found for language: {source_lang}")
             
+        try:
+            from transformers import MarianMTModel, MarianTokenizer
+        except ImportError:
+            logger.error("transformers package is not installed. Translation requires transformers.")
+            raise RuntimeError("transformers package is not installed.")
+
         model_name = self._model_map[source_lang]
         if source_lang not in self._models:
             logger.info(f"Loading translation model for {source_lang}: {model_name}")

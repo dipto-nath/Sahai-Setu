@@ -74,7 +74,7 @@ class GeminiService:
     All analysis goes through Pydantic validation before being used.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-3.6-flash"):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
         self.model_name = model_name
         self.client = None
@@ -119,7 +119,7 @@ Categories:
 5. vulnerability: Socio-economic vulnerability, illiteracy, lack of legal awareness, or systemic power imbalances.
 6. urgency: Need for immediate police protection, medical assistance, or FIR registration under the PoA Act.
 7. human_review_recommended: Whether a human officer must prioritize this case immediately.
-8. is_prank_or_spam: CRITICAL FLAG — set to true if this statement is clearly a joke, prank, spam, test call, or non-emergency complaint rather than a genuine atrocity. Trivial complaints that mention "help" or "police" but are about a stolen chips packet, missing pizza, food delivery gone wrong, lost trivial items of negligible monetary value (e.g. "5 rs", "10 rupees"), a tiffin, a cycle, or a playful/humorous tone must be flagged. When in doubt, prefer false (treat as genuine).
+8. is_prank_or_spam: CRITICAL FLAG — set to true if this statement is clearly a joke, prank, spam, test call, or non-emergency/irrelevant complaint. You MUST flag any complaint regarding stolen or missing food items (e.g., chocolate, pizza, samosa, chips, snacks, meals), trivial personal belongings (e.g., tiffin, cycle, pen), or negligible amounts of money (e.g., 5 rupees, 10 rs). Additionally, flag general property thefts (e.g., stolen cars like "Thar", stolen bikes, stolen mobile phones) as true IF they are just ordinary thefts with no mention of physical violence, threats, or caste-based atrocities, because this is an atrocity helpline, not a general theft reporting line. Even if the user says "help" or "send police", if the context is about a trivial annoyance or general theft rather than a genuine physical threat or atrocity (especially under the PoA Act), set this to true.
 
 Output strictly valid JSON with this exact schema:
 {{
@@ -257,6 +257,8 @@ Return ONLY the JSON. No markdown, no backticks, no commentary."""
             "stole my packet",
             "stolen chips packet",
             "stolen chips",
+            "stole my chocolate",
+            "stolen my chocolate",
             "stole my pizza",
             "missing pizza",
             "lorry here as soon as possible",

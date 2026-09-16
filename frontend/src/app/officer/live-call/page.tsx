@@ -68,7 +68,7 @@ export default function LiveCallPage() {
       let victimInterval: NodeJS.Timeout;
       let officerInterval: NodeJS.Timeout;
       // DEEPGRAM INTEGRATION
-      const DEEPGRAM_API_KEY = '3ec2d687b902e50495a0d08efe934833c6ab44ff';
+      const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || '';
       // Use a chronological log array to interleave Officer and Victim sentences properly
       const dialogueLog: { speaker: string, text: string }[] = [];
       

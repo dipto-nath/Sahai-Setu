@@ -7,6 +7,7 @@ from typing import Dict, Any
 from ai.speech import get_speech_service
 from app.services.gemini_service import get_gemini_service
 from app.config import settings
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -81,31 +82,32 @@ Provide a real-time JSON response with the following strictly formatted fields:
             try:
                 # Use Gemini client directly if available
                 if gemini_service.client:
+                    logger.info(f"Calling Gemini API with model: {gemini_service.model_name}")
                     response = await gemini_service.client.aio.models.generate_content(
                         model=gemini_service.model_name,
                         contents=prompt,
-                        config={"response_mime_type": "application/json"}
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
+                    logger.info(f"Gemini response received: {response.text[:200] if response.text else 'empty'}")
                     ai_data = json.loads(response.text)
                 else:
                     # Mock response for demo mode
                     ai_data = {
-                        "current_svi": min(100, len(full_transcript) // 2),
+                        "current_svi": 30,
                         "guidance": ["Listen carefully to the caller", "Keep a calm tone"],
                         "risk_detected": False
                     }
             except Exception as e:
-                logger.error(f"Live Gemini Error: {e}")
+                logger.error(f"Live Gemini Error: {type(e).__name__}: {e}")
                 # Fallback to simulated logic if API quota is exhausted or fails
-                word_count = len(full_transcript.split())
                 ai_data = {
-                    "current_svi": min(100, word_count * 2),
+                    "current_svi": 30,
                     "guidance": [
                         "Summary: Caller is expressing distress, awaiting further context.",
                         "Care: Acknowledge their feelings and maintain a supportive tone.",
                         "Action: Ask gentle clarifying questions to assess immediate safety."
                     ],
-                    "risk_detected": word_count > 20
+                    "risk_detected": False
                 }
             
             # 3. Send SVI & Guidance back to frontend (without the transcript chunk)

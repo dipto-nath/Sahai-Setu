@@ -37,6 +37,30 @@ async def lifespan(app: FastAPI):
     try:
         init_db()
         logger.info("Database initialized successfully")
+        
+        # Seed demo users for Render deployment
+        from app.database import SessionLocal
+        from app.models.users import User, UserRole
+        from app.services.auth_service import AuthService
+        db = SessionLocal()
+        try:
+            auth = AuthService()
+            demo_users = [
+                ("Admin User", "admin@nhaa.local", "admin123", UserRole.ADMIN),
+                ("Counsellor", "counsellor@nhaa.local", "counsellor123", UserRole.COUNSELLOR),
+                ("Legal Officer", "legal@nhaa.local", "legal123", UserRole.LEGAL_OFFICER),
+                ("Staff User", "officer1@nhaa.local", "demo123", UserRole.AUTHORIZED_STAFF),
+            ]
+            for name, email, password, role in demo_users:
+                if not db.query(User).filter(User.email == email).first():
+                    db.add(User(name=name, email=email, password_hash=auth.hash_password(password), role=role))
+            db.commit()
+            logger.info("Demo users seeded successfully")
+        except Exception as seed_err:
+            logger.error(f"Failed to seed demo users: {seed_err}")
+        finally:
+            db.close()
+            
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
     yield

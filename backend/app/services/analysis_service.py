@@ -16,21 +16,30 @@ class AnalysisService:
     
     def __init__(self, use_demo: bool = True):
         self.use_demo = use_demo
-        # Initialize AI services
-        from ai.nlp import get_nlp_service
-        from ai.speech import get_speech_service
-        from ai.audio import get_audio_service
-        from ai.fusion import get_fusion_service
-        from ai.svi import get_svi_service
-        from ai.recommendation import get_recommendation_service
-        
-        self.nlp_service = get_nlp_service()
-        self.speech_service = get_speech_service()
-        self.audio_service = get_audio_service()
-        self.fusion_service = get_fusion_service()
-        self.svi_service = get_svi_service()
-        self.recommendation_service = get_recommendation_service()
-        
+        # Initialize AI services (Wrap in try-except so missing legacy deps don't crash the whole service)
+        try:
+            from ai.nlp import get_nlp_service
+            from ai.speech import get_speech_service
+            from ai.audio import get_audio_service
+            from ai.fusion import get_fusion_service
+            from ai.svi import get_svi_service
+            from ai.recommendation import get_recommendation_service
+            
+            self.nlp_service = get_nlp_service()
+            self.speech_service = get_speech_service()
+            self.audio_service = get_audio_service()
+            self.fusion_service = get_fusion_service()
+            self.svi_service = get_svi_service()
+            self.recommendation_service = get_recommendation_service()
+        except ImportError as e:
+            logger.warning(f"Could not load legacy AI services: {e}")
+            self.nlp_service = None
+            self.speech_service = None
+            self.audio_service = None
+            self.fusion_service = None
+            self.svi_service = None
+            self.recommendation_service = None
+            
         logger.info(f"Initialized AnalysisService (demo_mode={use_demo})")
     async def analyze_text(
         self,

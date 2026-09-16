@@ -3,7 +3,7 @@ Assessment Model
 """
 from sqlalchemy import String, Enum as SQLEnum, ForeignKey, Index, Float, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import Optional
+from typing import Optional, List
 import enum
 
 from app.models.base import Base, IDMixin, TimestampMixin

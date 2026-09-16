@@ -1,6 +1,7 @@
 import asyncio
 from app.services.case_service import CaseService
 from app.schemas.cases import CaseCreate
+import traceback
 
 async def main():
     try:
@@ -16,7 +17,6 @@ async def main():
         )
         print("Analysis successful:", result)
     except Exception as e:
-        import traceback
         traceback.print_exc()
 
 if __name__ == "__main__":

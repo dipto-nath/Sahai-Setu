@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     audio_model_name: str = "librosa"
     
     # CORS
-    cors_origins: List[str] = Field(default=["http://localhost:3000", "http://localhost:3001"])
+    cors_origins: List[str] = Field(default=["*"])
     
     # Demo Settings
     seed_demo_data: bool = True

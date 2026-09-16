@@ -450,7 +450,7 @@ class CaseService:
             user_id=user_id,
             action=action,
             case_id=case_id,
-            metadata=metadata
+            metadata_json=json.dumps(metadata) if metadata else None
         )
         db.add(audit)
         db.commit()

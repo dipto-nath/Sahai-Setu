@@ -38,7 +38,6 @@ export default function LiveCallPage() {
   const [bioConnected, setBioConnected] = useState<boolean>(false);
   const bioWsRef                      = useRef<WebSocket | null>(null);
   const bioRecorderRef                = useRef<MediaRecorder | null>(null);
-  const bioBufRef                     = useRef<Blob[]>([]);
   const bioFlushRef                   = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -54,34 +53,60 @@ export default function LiveCallPage() {
 
     const bioWs = new WebSocket(`${wsBase}/api/live/audio-stream`);
     bioWsRef.current = bioWs;
-    bioBufRef.current = [];
 
     bioWs.onopen = () => {
       setBioConnected(true);
 
-      // Create a SEPARATE MediaRecorder specifically for biomarker analysis.
-      // This does NOT conflict with Deepgram's recorder on the same stream.
-      let recorder: MediaRecorder;
-      try {
-        recorder = new MediaRecorder(tabStream, { mimeType: 'audio/webm;codecs=opus' });
-      } catch {
-        recorder = new MediaRecorder(tabStream);
-      }
-      bioRecorderRef.current = recorder;
+      /**
+       * KEY FIX: MediaRecorder WebM streams only include the container
+       * header in the very first chunk. If we accumulate 250ms micro-chunks
+       * and re-combine them, librosa can't parse the blob (missing header).
+       *
+       * Solution: cycle a fresh MediaRecorder every 3 seconds.
+       * Each recorder.stop() triggers onstop with a COMPLETE WebM blob
+       * that includes the header — librosa can parse this correctly.
+       */
+      let isBioActive = true;
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) bioBufRef.current.push(e.data);
+      const runCycle = () => {
+        if (!isBioActive || bioWs.readyState !== WebSocket.OPEN) return;
+
+        const chunks: Blob[] = [];
+        let rec: MediaRecorder;
+        try {
+          rec = new MediaRecorder(tabStream, { mimeType: 'audio/webm;codecs=opus' });
+        } catch {
+          rec = new MediaRecorder(tabStream);
+        }
+        bioRecorderRef.current = rec;
+
+        rec.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        rec.onstop = async () => {
+          if (chunks.length === 0) { runCycle(); return; }
+          const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+          if (blob.size > 500 && bioWs.readyState === WebSocket.OPEN) {
+            const buf = await blob.arrayBuffer();
+            bioWs.send(buf);
+          }
+          // Start the next 3-second cycle immediately
+          runCycle();
+        };
+
+        rec.start();   // collect everything into one blob
+
+        // Stop after 3 seconds → triggers onstop → sends complete WebM
+        bioFlushRef.current = setTimeout(() => {
+          if (rec.state === 'recording') rec.stop();
+        }, 3000) as unknown as ReturnType<typeof setInterval>;
       };
-      recorder.start(250); // 250ms micro-chunks
 
-      // Every 3 seconds flush the buffer and send raw bytes to backend
-      bioFlushRef.current = setInterval(async () => {
-        if (bioBufRef.current.length === 0 || bioWs.readyState !== WebSocket.OPEN) return;
-        const blob = new Blob(bioBufRef.current, { type: 'audio/webm' });
-        bioBufRef.current = [];
-        const buf = await blob.arrayBuffer();
-        bioWs.send(buf);
-      }, 3000);
+      runCycle();   // kick off the first cycle
+
+      // Store a flag so stopBioStream can halt cycling
+      (bioWs as any)._stopCycles = () => { isBioActive = false; };
     };
 
     bioWs.onmessage = (event) => {
@@ -98,8 +123,13 @@ export default function LiveCallPage() {
     bioWs.onclose = () => setBioConnected(false);
   }
 
+
   function stopBioStream() {
-    bioFlushRef.current && clearInterval(bioFlushRef.current);
+    // First, halt the cycling loop so onstop doesn't trigger runCycle again
+    if (bioWsRef.current && (bioWsRef.current as any)._stopCycles) {
+      (bioWsRef.current as any)._stopCycles();
+    }
+    bioFlushRef.current && clearTimeout(bioFlushRef.current as unknown as ReturnType<typeof setTimeout>);
     if (bioRecorderRef.current?.state === 'recording') bioRecorderRef.current.stop();
     if (bioWsRef.current?.readyState === WebSocket.OPEN) bioWsRef.current.close();
     setBioConnected(false);

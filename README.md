@@ -16,6 +16,11 @@ The SahaiSetu AI Triage System helps **authorized call center officers** priorit
 4. **Recommends** appropriate next-step actions (counselling, legal, emergency, etc.)
 5. **Surfaces** high-priority cases to officers for human review
 
+### Recent Updates
+- **Gemini Live Call Analysis Integration**: Real-time evaluation using Gemini for deeper contextual insights.
+- **Short-Text Emergency Bypass**: The NLP engine can now immediately prioritize ultra-short, urgent distress messages (like "I want to jump") bypassing normal length penalties.
+- **Improved Platform Support**: Configured to run reliably on Mac OS environments using specific pre-compiled dependency wheels (Python 3.9).
+
 ### Important Disclaimers
 
 - This is a **decision-support tool only** - it does NOT make final decisions about victims.

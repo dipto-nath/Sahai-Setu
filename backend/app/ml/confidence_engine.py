@@ -85,7 +85,11 @@ class ConfidenceEngine:
         factors.gemini_response_validity = self._validate_gemini(gemini_response)
         if text_features:
             text_len = text_features.get("text_length", 0)
-            factors.text_length_sufficiency = min(1.0, text_len / 50.0) if text_len > 0 else 0.3
+            has_high_signal = text_features.get("distress_signal", 0) > 0.7 or text_features.get("urgency_signal", 0) > 0.7
+            if has_high_signal:
+                factors.text_length_sufficiency = 1.0
+            else:
+                factors.text_length_sufficiency = min(1.0, text_len / 50.0) if text_len > 0 else 0.3
         else:
             factors.text_length_sufficiency = 0.5
 

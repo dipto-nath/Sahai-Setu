@@ -113,7 +113,7 @@ Analyze for the following PREDEFINED contextual categories under the purview of 
 
 Categories:
 1. fear: Fear of reprisal, retaliation, or police inaction following an atrocity.
-2. distress: Trauma stemming from caste-based violence, untouchability practices, sexual violence, or public humiliation.
+2. distress: Trauma stemming from caste-based violence, untouchability practices, sexual violence, or public humiliation. (Also include severe emotional distress or self-harm/suicidal ideation like "I want to jump" or "I want to die" even if context is short).
 3. threat_context: Threats to life, property destruction, forced displacement, land grabbing, or use of casteist slurs.
 4. social_isolation: Imposition of social or economic boycotts, denial of access to public resources/water, or ostracization from the village.
 5. vulnerability: Socio-economic vulnerability, illiteracy, lack of legal awareness, or systemic power imbalances.
@@ -172,10 +172,10 @@ Return ONLY the JSON. No markdown, no backticks, no commentary."""
 
         # Simple keyword-based mock
         fear_words = ["afraid", "scared", "terrified", "fear", "ভয়", "डर"]
-        distress_words = ["help", "desperate", "suffering", "সাহায্য", "मदद"]
+        distress_words = ["help", "desperate", "suffering", "সাহায্য", "मदद", "jump", "die", "suicide", "kill myself"]
         threat_words = ["threat", "kill", "harm", "weapon", "ধমকি", "धमकी"]
         isolation_words = ["alone", "no one", "isolated", "একা", "अकेला"]
-        urgency_words = ["urgent", "immediately", "now", "এখনই", "अभी"]
+        urgency_words = ["urgent", "immediately", "now", "এখনই", "अभी", "jump", "die", "suicide", "kill myself"]
 
         for word in fear_words:
             if word in text_lower:

@@ -21,6 +21,7 @@ class RecommendationType(str, enum.Enum):
     PROTECTION_PATHWAY = "PROTECTION_PATHWAY"
     HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
     CONTINUE_MONITORING = "CONTINUE_MONITORING"
+    OFFICER_GUIDANCE = "OFFICER_GUIDANCE"
 
 
 class RecommendationPriority(str, enum.Enum):

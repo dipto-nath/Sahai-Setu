@@ -94,10 +94,6 @@ export default function ProcessingPage() {
           )}
         </div>
 
-        {/* Demo Mode Notice */}
-        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-center text-sm text-amber-800">
-          <strong>DEMO MODE</strong> - This is a prototype demonstration with simulated processing.
-        </div>
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ FEAR_PATTERNS = {
 
 DISTRESS_PATTERNS = {
     "en": [r"\b(distress|suffering|pain|agony|anguish|despair|trauma|unconscious|bleeding|blood|sos|injured|collapsed|fracture|broken|beaten|assaulted|tortured|lynched|hospitalized|icu)\b",
-           r"\b(help|helpless|hopeless|desperate|save me|emergency|crying|weeping|refused)\b"],
+           r"\b(help|helpless|hopeless|desperate|save me|emergency|crying|weeping|refused|jump|suicide|die|kill myself|end my life)\b"],
     "bn": [r"ব্যথা|কষ্ট|বেদনা|দুঃখ|নিরাশা|বাঁচাও|সাহায্য|বিপদ|মারা|আহত|রক্তপাত|অচেতন|জ্ঞান|লুটিয়ে|হাড়|মারধর|আক্রান্ত|নির্যাতন|লিঞ্চ|হাসপাতাল|আইসিইউ|ট্রমা|অসহায়|নিরুপায়|অস্বীকার"],
     "hi": [r"पीड़ा|कष्ट|वेदना|दुःख|निराशा|मदद|मदित|बचाओ|तकलीफ|दर्द|फंस|पस|घायल|खून|बेहोश|होश|गिरा|हड्डी|फ्रैक्चर|मारपीट|पीटा|हमला|प्रताड़ित|यातना|लिंचिंग|अस्पताल|आईसीयू|आघात|बेबस|लाचार|एफआईआर|मना"],
 }
@@ -44,7 +44,7 @@ ISOLATION_PATTERNS = {
 
 URGENCY_PATTERNS = {
     "en": [r"\b(urgent|immediately|right now|asap|emergency|quick|dispatch|intervention|ambulance|critical)\b",
-           r"\b(cannot wait|can't wait|no time|running out|fast|sos|rescue|police|protection)\b"],
+           r"\b(cannot wait|can't wait|no time|running out|fast|sos|rescue|police|protection|jump|suicide|die|kill myself|end my life)\b"],
     "bn": [r"অবিলম্বে|তৎক্ষণাৎ|এখনই|জরুরি|তাড়াতাড়ি|শীগগির|জলদি|পুলিশ|অ্যাম্বুলেন্স|সংকটজনক|প্রাণঘাতী|উদ্ধার|হস্তক্ষেপ|অপহরণ"],
     "hi": [r"तुरंत|अभी|जरूरी|इमरजेंसी|जल्दी|फौरन|तेजी|पुलिस|एम्बुलेंस|गंभीर|जानलेवा|बचाव|हस्तक्षेप|अपहरण"],
 }

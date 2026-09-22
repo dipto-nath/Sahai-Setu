@@ -148,10 +148,6 @@ export default function OfficerLayout({
               <span className="hidden sm:block text-sm text-gray-500">
                 {user?.role || 'AUTHORIZED_STAFF'}
               </span>
-              <span className="hidden md:inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
-                <Activity className="w-3 h-3" />
-                DEMO MODE
-              </span>
             </div>
           </div>
         </header>

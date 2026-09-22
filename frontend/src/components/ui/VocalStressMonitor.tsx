@@ -43,37 +43,39 @@ function scoreToLabel(score: number): string {
 }
 
 /** SVG circular gauge */
-function StressGauge({ score }: { score: number }) {
-  const r = 54;
+function StressGauge({ score, size = 140 }: { score: number; size?: number }) {
+  const r = size === 90 ? 34 : 54;
   const circumference = 2 * Math.PI * r;
   const filled = (score / 100) * circumference;
   const color = scoreToColor(score);
+  const cx = size / 2;
+  const cy = size / 2;
+  const fontSize = size === 90 ? 18 : 28;
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <svg width="140" height="140" viewBox="0 0 140 140">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {/* track */}
-        <circle cx="70" cy="70" r={r} fill="none" stroke="#e5e7eb" strokeWidth="12" />
-        {/* progress — rotate so it starts at 12 o'clock */}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth={size === 90 ? 8 : 12} />
+        {/* progress */}
         <circle
-          cx="70" cy="70" r={r}
+          cx={cx} cy={cy} r={r}
           fill="none"
           stroke={color}
-          strokeWidth="12"
+          strokeWidth={size === 90 ? 8 : 12}
           strokeLinecap="round"
           strokeDasharray={`${filled} ${circumference}`}
           strokeDashoffset={circumference / 4}
           style={{ transition: 'stroke-dasharray 0.5s ease, stroke 0.5s ease' }}
         />
-        {/* label */}
-        <text x="70" y="65" textAnchor="middle" className="text-3xl font-black" fontSize="28" fontWeight="900" fill={color}>
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize={fontSize} fontWeight="900" fill={color}>
           {score}
         </text>
-        <text x="70" y="85" textAnchor="middle" fontSize="10" fill="#6b7280">
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize={size === 90 ? 7 : 10} fill="#6b7280">
           / 100
         </text>
       </svg>
-      <span className="text-xs font-semibold tracking-wider uppercase" style={{ color }}>
+      <span className="text-[10px] font-semibold tracking-wider uppercase" style={{ color }}>
         {scoreToLabel(score)}
       </span>
     </div>
@@ -111,9 +113,11 @@ interface Props {
   isCallActive: boolean;
   /** The victim's audio stream from tab-share, captured by parent */
   victimStream: MediaStream | null;
+  /** Compact mode: smaller gauge, no timeline — for use in 2-col layouts */
+  compact?: boolean;
 }
 
-export default function VocalStressMonitor({ isCallActive, victimStream }: Props) {
+export default function VocalStressMonitor({ isCallActive, victimStream, compact = false }: Props) {
   const [score, setScore] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
   const [history, setHistory] = useState<number[]>([]);
@@ -194,60 +198,64 @@ export default function VocalStressMonitor({ isCallActive, victimStream }: Props
   }, [isCallActive, victimStream, start, stop]);
 
   return (
-    <Card className="border border-gray-200">
-      <CardHeader className="pb-3 border-b bg-gray-50/50">
-        <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-          <Activity className="w-4 h-4 text-purple-500" />
-          Vocal Biomarkers
-          <span className={`ml-auto flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+    <Card className="border border-gray-200 flex flex-col">
+      <CardHeader className={`border-b bg-gray-50/50 ${compact ? 'pb-2 pt-3 px-3' : 'pb-3'}`}>
+        <CardTitle className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+          <Activity className="w-3.5 h-3.5 text-purple-500" />
+          Vocal Bio
+          <span className={`ml-auto flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
             connected ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-400'
           }`}>
-            {connected ? <Mic className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
-            {connected ? 'Analysing' : 'Inactive'}
+            {connected ? <Mic className="w-2.5 h-2.5" /> : <MicOff className="w-2.5 h-2.5" />}
+            {connected ? 'On' : 'Off'}
           </span>
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="p-4 space-y-4">
-        {/* Circular Gauge */}
+      <CardContent className={`flex-1 ${compact ? 'p-2 space-y-2' : 'p-4 space-y-4'}`}>
+        {/* Gauge */}
         <div className="flex justify-center">
-          <StressGauge score={score} />
+          <StressGauge score={score} size={compact ? 90 : 140} />
         </div>
 
         {/* Biomarker Tags */}
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Detected Indicators
-          </p>
-          <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+          {!compact && (
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              Detected Indicators
+            </p>
+          )}
+          <div className="flex flex-wrap gap-1 min-h-[20px]">
             {tags.length > 0 ? tags.map(tag => (
               <span
                 key={tag}
-                className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-all duration-300 ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium transition-all duration-300 leading-tight ${
                   TAG_COLORS[tag] ?? 'bg-gray-100 text-gray-700 border-gray-300'
                 }`}
               >
                 {tag}
               </span>
             )) : (
-              <span className="text-xs text-gray-400 italic">
-                {isCallActive ? 'Awaiting audio…' : 'Start call to detect indicators'}
+              <span className="text-[10px] text-gray-400 italic">
+                {isCallActive ? 'Awaiting…' : 'Inactive'}
               </span>
             )}
           </div>
         </div>
 
-        {/* Stress Timeline */}
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Stress Timeline (last 30 readings)
-          </p>
-          <StressTimeline history={history} />
-          <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-            <span>Older</span>
-            <span>Now</span>
+        {/* Stress Timeline — hidden in compact mode */}
+        {!compact && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              Stress Timeline (last 30 readings)
+            </p>
+            <StressTimeline history={history} />
+            <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+              <span>Older</span>
+              <span>Now</span>
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

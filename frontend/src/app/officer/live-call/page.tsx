@@ -282,57 +282,76 @@ export default function LiveCallPage() {
         </div>
 
         {/* Right Column: Analytics & Guidance */}
-        <div className="space-y-4">
-          {/* SVI Gauge */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                Live SVI Score
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-4">
-                <div className={`text-6xl font-black ${
+        <div className="space-y-3">
+
+          {/* Row 1: SVI + Vocal Biomarkers side-by-side */}
+          <div className="grid grid-cols-2 gap-3">
+
+            {/* SVI Gauge */}
+            <Card className="flex flex-col">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Live SVI Score
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 flex flex-col items-center justify-center py-3 px-2">
+                <div className={`text-5xl font-black leading-none ${
                   sviScore >= 75 ? 'text-red-600' :
                   sviScore >= 40 ? 'text-amber-500' :
                   'text-emerald-500'
                 }`}>
                   {sviScore}
                 </div>
-                <div className="text-sm text-gray-500 mt-2 font-medium">
-                  {sviScore >= 75 ? 'CRITICAL RISK' :
-                   sviScore >= 40 ? 'MODERATE RISK' : 'LOW RISK'}
+                <div className={`text-[10px] mt-1.5 font-semibold uppercase tracking-wide ${
+                  sviScore >= 75 ? 'text-red-500' :
+                  sviScore >= 40 ? 'text-amber-500' :
+                  'text-emerald-500'
+                }`}>
+                  {sviScore >= 75 ? 'CRITICAL' :
+                   sviScore >= 40 ? 'MODERATE' : 'LOW RISK'}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                {/* Mini bar */}
+                <div className="w-full mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      sviScore >= 75 ? 'bg-red-500' :
+                      sviScore >= 40 ? 'bg-amber-400' : 'bg-emerald-400'
+                    }`}
+                    style={{ width: `${sviScore}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* Vocal Biomarkers — NEW */}
-          <VocalStressMonitor isCallActive={isActive} victimStream={victimStream} />
+            {/* Vocal Biomarkers — compact */}
+            <VocalStressMonitor isCallActive={isActive} victimStream={victimStream} compact />
+          </div>
 
-          {/* Gemini Guidance */}
-          <Card className={`border-2 transition-colors ${riskDetected ? 'border-red-200 bg-red-50' : 'border-blue-100 bg-blue-50/50'}`}>
-            <CardHeader className="pb-3">
+          {/* Row 2: AI Guidance — always visible */}
+          <Card className={`border-2 transition-colors ${
+            riskDetected ? 'border-red-200 bg-red-50' : 'border-blue-100 bg-blue-50/50'
+          }`}>
+            <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 {riskDetected ? (
-                  <><AlertTriangle className="w-5 h-5 text-red-600" /> Immediate Actions (AI)</>
+                  <><AlertTriangle className="w-4 h-4 text-red-600" /> Immediate Actions (AI)</>
                 ) : (
-                  <><ShieldAlert className="w-5 h-5 text-blue-600" /> AI Guidance</>
+                  <><ShieldAlert className="w-4 h-4 text-blue-600" /> AI Guidance</>
                 )}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               {guidance.length > 0 ? (
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   {guidance.map((tip, i) => (
                     <li key={i} className="flex items-start gap-2">
-                      <CheckCircle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${riskDetected ? 'text-red-500' : 'text-blue-500'}`} />
-                      <span className={`text-sm ${riskDetected ? 'text-red-900 font-medium' : 'text-blue-900'}`}>{tip}</span>
+                      <CheckCircle className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${riskDetected ? 'text-red-500' : 'text-blue-500'}`} />
+                      <span className={`text-xs ${riskDetected ? 'text-red-900 font-medium' : 'text-blue-900'}`}>{tip}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="text-sm text-gray-500 italic py-4 text-center">
+                <div className="text-xs text-gray-400 italic py-2 text-center">
                   Waiting for conversation context...
                 </div>
               )}

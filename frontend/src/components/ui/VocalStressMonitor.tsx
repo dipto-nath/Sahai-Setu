@@ -106,7 +106,8 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
     let animationId: number;
     let lastUpdate = Date.now();
     let recentRms: number[] = [];
-    let recentFreqRatio: number[] = [];
+    let recentZcr: number[] = [];
+    let recentCentroid: number[] = [];
 
     const draw = () => {
       animationId = requestAnimationFrame(draw);
@@ -114,27 +115,37 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
       analyser.getByteTimeDomainData(dataArray);
       analyser.getByteFrequencyData(freqArray);
       
-      // Calculate RMS (volume)
+      // Calculate RMS (volume) & Zero-Crossing Rate (ZCR)
       let sumSquares = 0;
+      let zcr = 0;
       for (let i = 0; i < bufferLength; i++) {
         const val = (dataArray[i] - 128) / 128;
         sumSquares += val * val;
+        
+        if (i > 0) {
+          const prev = (dataArray[i - 1] - 128) / 128;
+          if ((val >= 0 && prev < 0) || (val < 0 && prev >= 0)) zcr++;
+        }
       }
       const rms = Math.sqrt(sumSquares / bufferLength);
-      recentRms.push(rms);
-      if (recentRms.length > 120) recentRms.shift(); // keep 2 seconds at 60fps
+      const zcrRate = zcr / bufferLength;
       
-      // Calculate High/Low Frequency Energy Ratio (for whisper detection)
-      let lowFreqSum = 0;
-      let highFreqSum = 0;
-      const halfBuffer = Math.floor(bufferLength / 2);
-      for (let i = 0; i < halfBuffer; i++) {
-        lowFreqSum += freqArray[i];
-        highFreqSum += freqArray[i + halfBuffer];
+      recentRms.push(rms);
+      if (recentRms.length > 120) recentRms.shift();
+      recentZcr.push(zcrRate);
+      if (recentZcr.length > 120) recentZcr.shift();
+      
+      // Calculate Spectral Centroid (Brightness/Pitch proxy)
+      let num = 0;
+      let den = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const magnitude = freqArray[i];
+        num += i * magnitude;
+        den += magnitude;
       }
-      const freqRatio = lowFreqSum > 0 ? highFreqSum / lowFreqSum : 0;
-      recentFreqRatio.push(freqRatio);
-      if (recentFreqRatio.length > 120) recentFreqRatio.shift();
+      const centroid = den === 0 ? 0 : num / den;
+      recentCentroid.push(centroid);
+      if (recentCentroid.length > 120) recentCentroid.shift();
       
       // Draw live waveform on Canvas
       const canvas = canvasRef.current;
@@ -167,7 +178,8 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
         lastUpdate = now;
         
         const avgRms = recentRms.reduce((a,b) => a+b, 0) / recentRms.length;
-        const avgFreqRatio = recentFreqRatio.reduce((a,b) => a+b, 0) / recentFreqRatio.length;
+        const avgZcr = recentZcr.reduce((a,b) => a+b, 0) / recentZcr.length;
+        const avgCentroid = recentCentroid.reduce((a,b) => a+b, 0) / recentCentroid.length;
         
         // Count rapid spikes (proxy for hyperventilation/panic onsets)
         let spikes = 0;
@@ -178,15 +190,16 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
         let newTags: string[] = [];
         let newScore = 0;
         
-        if (avgRms < 0.01) {
+        // Advanced Speech Heuristics
+        if (avgRms < 0.005) {
           newTags.push('Prolonged Silence / Shock');
           newScore = 60;
-        } else if (avgRms < 0.05 && avgFreqRatio > 0.4) {
-          // Whispering has low volume but uncharacteristically high high-frequency energy (white noise)
-          // Normal quiet background noise usually rumbles with low frequency (low freqRatio)
+        } else if (avgRms > 0.005 && avgRms < 0.08 && avgZcr > 0.15) {
+          // Whispering: Low/Moderate Volume + High ZCR (Unvoiced/Fricative heavy)
           newTags.push('Whispering / Hiding');
           newScore = 50;
-        } else if (avgRms > 0.25) {
+        } else if (avgRms > 0.25 || (avgRms > 0.15 && avgCentroid > bufferLength * 0.25)) {
+          // Screaming: Very loud OR somewhat loud but very bright/high-pitch (Shrieking)
           newTags.push('Screaming / High Pitch Alert');
           newScore = 95;
         } else if (avgRms > 0.15) {
@@ -194,7 +207,7 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
           newScore = 75;
         }
         
-        if (spikes > 10 && avgRms > 0.05) {
+        if (spikes > 10 && avgRms > 0.03) {
           newTags.push('Hyperventilating / Rapid Speech');
           newScore = Math.max(newScore, 70);
         }

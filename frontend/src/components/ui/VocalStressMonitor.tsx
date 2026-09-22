@@ -106,6 +106,7 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
     let animationId: number;
     let lastUpdate = Date.now();
     let recentRms: number[] = [];
+    let recentFreqRatio: number[] = [];
 
     const draw = () => {
       animationId = requestAnimationFrame(draw);
@@ -122,6 +123,18 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
       const rms = Math.sqrt(sumSquares / bufferLength);
       recentRms.push(rms);
       if (recentRms.length > 120) recentRms.shift(); // keep 2 seconds at 60fps
+      
+      // Calculate High/Low Frequency Energy Ratio (for whisper detection)
+      let lowFreqSum = 0;
+      let highFreqSum = 0;
+      const halfBuffer = Math.floor(bufferLength / 2);
+      for (let i = 0; i < halfBuffer; i++) {
+        lowFreqSum += freqArray[i];
+        highFreqSum += freqArray[i + halfBuffer];
+      }
+      const freqRatio = lowFreqSum > 0 ? highFreqSum / lowFreqSum : 0;
+      recentFreqRatio.push(freqRatio);
+      if (recentFreqRatio.length > 120) recentFreqRatio.shift();
       
       // Draw live waveform on Canvas
       const canvas = canvasRef.current;
@@ -154,6 +167,7 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
         lastUpdate = now;
         
         const avgRms = recentRms.reduce((a,b) => a+b, 0) / recentRms.length;
+        const avgFreqRatio = recentFreqRatio.reduce((a,b) => a+b, 0) / recentFreqRatio.length;
         
         // Count rapid spikes (proxy for hyperventilation/panic onsets)
         let spikes = 0;
@@ -167,7 +181,9 @@ export default function VocalStressMonitor({ victimStream, compact = false, isCa
         if (avgRms < 0.01) {
           newTags.push('Prolonged Silence / Shock');
           newScore = 60;
-        } else if (avgRms < 0.03) {
+        } else if (avgRms < 0.05 && avgFreqRatio > 0.4) {
+          // Whispering has low volume but uncharacteristically high high-frequency energy (white noise)
+          // Normal quiet background noise usually rumbles with low frequency (low freqRatio)
           newTags.push('Whispering / Hiding');
           newScore = 50;
         } else if (avgRms > 0.25) {

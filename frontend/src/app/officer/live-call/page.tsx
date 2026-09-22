@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ShieldAlert, Mic, MicOff, PhoneCall, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
+import VocalStressMonitor from '@/components/ui/VocalStressMonitor';
 
 interface LivePayload {
   transcript_chunk: string;
@@ -16,6 +17,7 @@ interface LivePayload {
 export default function LiveCallPage() {
   const [isActive, setIsActive] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [victimStream, setVictimStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -48,6 +50,9 @@ export default function LiveCallPage() {
 
       // 2. Get Officer Audio (Mic)
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Store victim stream separately so VocalStressMonitor can analyse it
+      setVictimStream(tabStream);
 
       // Combine for cleanup later
       const combinedStream = new MediaStream([...tabStream.getTracks(), ...micStream.getTracks()]);
@@ -151,6 +156,7 @@ export default function LiveCallPage() {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
+    setVictimStream(null);
     setIsActive(false);
 
     // Save live case if transcript exists
@@ -276,7 +282,7 @@ export default function LiveCallPage() {
         </div>
 
         {/* Right Column: Analytics & Guidance */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* SVI Gauge */}
           <Card>
             <CardHeader className="pb-2">
@@ -285,7 +291,7 @@ export default function LiveCallPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col items-center justify-center py-6">
+              <div className="flex flex-col items-center justify-center py-4">
                 <div className={`text-6xl font-black ${
                   sviScore >= 75 ? 'text-red-600' :
                   sviScore >= 40 ? 'text-amber-500' :
@@ -300,6 +306,9 @@ export default function LiveCallPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Vocal Biomarkers — NEW */}
+          <VocalStressMonitor isCallActive={isActive} victimStream={victimStream} />
 
           {/* Gemini Guidance */}
           <Card className={`border-2 transition-colors ${riskDetected ? 'border-red-200 bg-red-50' : 'border-blue-100 bg-blue-50/50'}`}>

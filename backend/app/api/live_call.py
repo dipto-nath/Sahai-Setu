@@ -1,8 +1,9 @@
 import json
 import logging
 import time
+import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from ai.speech import get_speech_service
 from app.services.gemini_service import get_gemini_service
@@ -12,6 +13,129 @@ from google.genai import types
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/live", tags=["Live Call"])
+
+
+def _compute_vocal_biomarkers(audio_bytes: bytes) -> Dict[str, Any]:
+    """
+    Process raw audio bytes with librosa and return a vocal_stress_score (0-100)
+    plus human-readable biomarker_tags. Falls back gracefully if librosa is unavailable.
+    """
+    try:
+        import librosa
+        import tempfile, os
+
+        if not audio_bytes or len(audio_bytes) < 500:
+            return {"vocal_stress_score": 0, "biomarker_tags": [], "raw": {}}
+
+        # Write bytes to a temp file so librosa can load it
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+
+        try:
+            y, sr = librosa.load(tmp_path, sr=16000, duration=4.0)
+        finally:
+            os.unlink(tmp_path)
+
+        if len(y) < sr * 0.5:   # Less than 0.5s — not enough data
+            return {"vocal_stress_score": 0, "biomarker_tags": [], "raw": {}}
+
+        # --- Feature Extraction ---
+        rms = librosa.feature.rms(y=y)[0]
+        energy_mean = float(np.mean(rms))
+        energy_std  = float(np.std(rms))
+
+        try:
+            f0, voiced_flag, _ = librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'))
+            voiced_f0 = f0[voiced_flag] if voiced_flag is not None else np.array([])
+            pitch_mean = float(np.mean(voiced_f0)) if len(voiced_f0) > 0 else 150.0
+            pitch_std  = float(np.std(voiced_f0))  if len(voiced_f0) > 0 else 15.0
+        except Exception:
+            pitch_mean, pitch_std = 150.0, 15.0
+
+        # Speaking-rate proxy via onset detection
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        tempo, _  = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
+        speech_rate = float(tempo) * 1.5 if tempo > 0 else 150.0
+
+        # Silence ratio (pauses)
+        silence_threshold = np.percentile(rms, 20)
+        is_speech = rms > silence_threshold
+        silence_ratio = float(1.0 - np.mean(is_speech))
+
+        # --- Stress Score (0-100) ---
+        # Higher pitch_std  → panic / crying
+        # Higher energy_std → sudden shouts or whimpers
+        # Higher silence    → hiding / shock
+        # Low energy_mean  → whispering
+        pitch_stress   = min(1.0, pitch_std  / 80.0)
+        energy_stress  = min(1.0, energy_std / 0.15)
+        silence_stress = min(1.0, silence_ratio / 0.6)
+        whisper_stress = max(0.0, 1.0 - (energy_mean / 0.05)) if energy_mean < 0.05 else 0.0
+
+        raw_score = (pitch_stress * 0.35) + (energy_stress * 0.30) + \
+                    (silence_stress * 0.20) + (whisper_stress * 0.15)
+        vocal_stress_score = int(round(min(100, raw_score * 100)))
+
+        # --- Biomarker Tags ---
+        tags: List[str] = []
+
+        if energy_mean < 0.015 and speech_rate < 100:
+            tags.append("Whispering / Hiding")
+        if pitch_std > 60:
+            tags.append("Sudden Distress / Panic")
+        if energy_std > 0.12 and pitch_std > 40:
+            tags.append("Crying / Sobbing")
+        if speech_rate > 220:
+            tags.append("Hyperventilating / Rapid Speech")
+        if silence_ratio > 0.55:
+            tags.append("Prolonged Silence / Shock")
+        if pitch_mean > 280 and pitch_std > 50:
+            tags.append("Screaming / High Pitch Alert")
+        if energy_std < 0.02 and speech_rate < 80:
+            tags.append("Monotone / Dissociation")
+        if not tags and vocal_stress_score < 25:
+            tags.append("Calm / Stable")
+
+        raw_features = {
+            "pitch_mean": round(pitch_mean, 1),
+            "pitch_std": round(pitch_std, 1),
+            "energy_mean": round(energy_mean, 4),
+            "energy_std": round(energy_std, 4),
+            "speech_rate_bpm": round(speech_rate, 1),
+            "silence_ratio": round(silence_ratio, 3),
+        }
+
+        return {
+            "vocal_stress_score": vocal_stress_score,
+            "biomarker_tags": tags,
+            "raw": raw_features,
+        }
+
+    except Exception as e:
+        logger.warning(f"Vocal biomarker extraction failed: {e}")
+        return {"vocal_stress_score": 0, "biomarker_tags": [], "raw": {}}
+
+
+@router.websocket("/audio-stream")
+async def audio_biomarker_stream(websocket: WebSocket):
+    """
+    Accepts raw audio bytes from the browser (2-4 second WebM chunks),
+    runs librosa analysis, and streams back JSON with vocal_stress_score
+    and biomarker_tags in real-time.
+    """
+    await websocket.accept()
+    logger.info("Vocal biomarker WebSocket connected")
+    try:
+        while True:
+            audio_bytes = await websocket.receive_bytes()
+            result = _compute_vocal_biomarkers(audio_bytes)
+            await websocket.send_json(result)
+    except WebSocketDisconnect:
+        logger.info("Vocal biomarker WebSocket disconnected")
+    except Exception as e:
+        logger.error(f"Vocal biomarker WebSocket error: {e}")
+
 
 class LiveCallConnectionManager:
     def __init__(self):

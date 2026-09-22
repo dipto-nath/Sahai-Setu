@@ -1,12 +1,6 @@
 'use client';
 
-/**
- * VocalStressMonitor — PURE DISPLAY COMPONENT
- * Receives pre-computed data as props from page.tsx.
- * page.tsx owns all WebSocket + MediaRecorder logic so there are zero timing issues.
- */
-
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Activity, Mic, MicOff } from 'lucide-react';
 
@@ -70,35 +64,160 @@ function StressTimeline({ history }: { history: number[] }) {
   );
 }
 
-export interface VocalBiomarkerData {
-  score: number;
-  tags: string[];
-  history: number[];
-  connected: boolean;
-}
-
-interface Props extends VocalBiomarkerData {
+interface Props {
+  victimStream: MediaStream | null;
   compact?: boolean;
   isCallActive: boolean;
 }
 
-export default function VocalStressMonitor({ score, tags, history, connected, compact = false, isCallActive }: Props) {
+export default function VocalStressMonitor({ victimStream, compact = false, isCallActive }: Props) {
+  const [score, setScore] = useState(0);
+  const [tags, setTags] = useState<string[]>([]);
+  const [history, setHistory] = useState<number[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!isCallActive || !victimStream) {
+      setScore(0);
+      setTags([]);
+      setHistory([]);
+      
+      // Clear canvas
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
+
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const audioCtx = new AudioContextClass();
+    const source = audioCtx.createMediaStreamSource(victimStream);
+    const analyser = audioCtx.createAnalyser();
+    
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const freqArray = new Uint8Array(bufferLength);
+
+    let animationId: number;
+    let lastUpdate = Date.now();
+    let recentRms: number[] = [];
+
+    const draw = () => {
+      animationId = requestAnimationFrame(draw);
+      
+      analyser.getByteTimeDomainData(dataArray);
+      analyser.getByteFrequencyData(freqArray);
+      
+      // Calculate RMS (volume)
+      let sumSquares = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const val = (dataArray[i] - 128) / 128;
+        sumSquares += val * val;
+      }
+      const rms = Math.sqrt(sumSquares / bufferLength);
+      recentRms.push(rms);
+      if (recentRms.length > 120) recentRms.shift(); // keep 2 seconds at 60fps
+      
+      // Draw live waveform on Canvas
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = score >= 75 ? '#ef4444' : score >= 40 ? '#f59e0b' : '#10b981';
+          ctx.beginPath();
+          
+          const sliceWidth = canvas.width * 1.0 / bufferLength;
+          let x = 0;
+          
+          for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = v * (canvas.height / 2);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            x += sliceWidth;
+          }
+          ctx.lineTo(canvas.width, canvas.height / 2);
+          ctx.stroke();
+        }
+      }
+      
+      // Every 1 second, calculate heuristics and update UI
+      const now = Date.now();
+      if (now - lastUpdate >= 1000) {
+        lastUpdate = now;
+        
+        const avgRms = recentRms.reduce((a,b) => a+b, 0) / recentRms.length;
+        
+        // Count rapid spikes (proxy for hyperventilation/panic onsets)
+        let spikes = 0;
+        for (let i = 1; i < recentRms.length; i++) {
+          if (recentRms[i] > avgRms * 1.5 && recentRms[i-1] <= avgRms * 1.5) spikes++;
+        }
+        
+        let newTags: string[] = [];
+        let newScore = 0;
+        
+        if (avgRms < 0.01) {
+          newTags.push('Prolonged Silence / Shock');
+          newScore = 60;
+        } else if (avgRms < 0.03) {
+          newTags.push('Whispering / Hiding');
+          newScore = 50;
+        } else if (avgRms > 0.25) {
+          newTags.push('Screaming / High Pitch Alert');
+          newScore = 95;
+        } else if (avgRms > 0.15) {
+          newTags.push('Sudden Distress / Panic');
+          newScore = 75;
+        }
+        
+        if (spikes > 10 && avgRms > 0.05) {
+          newTags.push('Hyperventilating / Rapid Speech');
+          newScore = Math.max(newScore, 70);
+        }
+        
+        if (newTags.length === 0) {
+          newTags.push('Calm / Stable');
+          newScore = 15;
+        }
+        
+        setScore(newScore);
+        setTags(newTags);
+        setHistory(prev => [...prev.slice(-29), newScore]);
+      }
+    };
+    
+    draw();
+    
+    return () => {
+      cancelAnimationFrame(animationId);
+      audioCtx.close();
+    };
+  }, [isCallActive, victimStream, score]); // score is in dep array so waveform color updates live
+
   return (
-    <Card className="border border-gray-200 flex flex-col">
-      <CardHeader className={`border-b bg-gray-50/50 ${compact ? 'pb-2 pt-3 px-3' : 'pb-3'}`}>
+    <Card className="border border-gray-200 flex flex-col overflow-hidden relative">
+      <CardHeader className={`border-b bg-gray-50/50 relative z-10 ${compact ? 'pb-2 pt-3 px-3' : 'pb-3'}`}>
         <CardTitle className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5 text-purple-500" />
           Vocal Bio
           <span className={`ml-auto flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-            connected ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-400'
+            isCallActive && victimStream ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-400'
           }`}>
-            {connected ? <Mic className="w-2.5 h-2.5" /> : <MicOff className="w-2.5 h-2.5" />}
-            {connected ? 'Live' : 'Off'}
+            {isCallActive && victimStream ? <Mic className="w-2.5 h-2.5" /> : <MicOff className="w-2.5 h-2.5" />}
+            {isCallActive && victimStream ? 'Live WebAudio' : 'Off'}
           </span>
         </CardTitle>
       </CardHeader>
 
-      <CardContent className={`flex-1 ${compact ? 'p-2 space-y-2' : 'p-4 space-y-4'}`}>
+      <CardContent className={`flex-1 relative z-10 ${compact ? 'p-2 space-y-2' : 'p-4 space-y-4'}`}>
         <div className="flex justify-center">
           <StressGauge score={score} size={compact ? 90 : 140} />
         </div>
@@ -136,6 +255,14 @@ export default function VocalStressMonitor({ score, tags, history, connected, co
           </div>
         )}
       </CardContent>
+      
+      {/* Live Waveform Canvas at the very bottom overlapping the card background */}
+      <canvas 
+        ref={canvasRef} 
+        width={300} 
+        height={60} 
+        className="absolute bottom-0 left-0 w-full opacity-30 pointer-events-none"
+      />
     </Card>
   );
 }

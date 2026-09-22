@@ -22,6 +22,7 @@ interface BioPayload {
 export default function LiveCallPage() {
   const [isActive, setIsActive]       = useState(false);
   const [stream, setStream]           = useState<MediaStream | null>(null);
+  const [victimStream, setVictimStream] = useState<MediaStream | null>(null);
   const wsRef                         = useRef<WebSocket | null>(null);
 
   const [transcript, setTranscript]   = useState<string>('');
@@ -31,111 +32,11 @@ export default function LiveCallPage() {
   const [language, setLanguage]       = useState<string>('hi');
   const transcriptEndRef              = useRef<HTMLDivElement>(null);
 
-  // ── Vocal Biomarker state (owned here, passed down as props) ─────────────
-  const [bioScore, setBioScore]       = useState<number>(0);
-  const [bioTags, setBioTags]         = useState<string[]>([]);
-  const [bioHistory, setBioHistory]   = useState<number[]>([]);
-  const [bioConnected, setBioConnected] = useState<boolean>(false);
-  const bioWsRef                      = useRef<WebSocket | null>(null);
-  const bioRecorderRef                = useRef<MediaRecorder | null>(null);
-  const bioFlushRef                   = useRef<ReturnType<typeof setInterval> | null>(null);
-
   useEffect(() => {
     if (transcriptEndRef.current) {
       transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [transcript]);
-
-  // ── Start vocal biomarker streaming from victim's tab audio ──────────────
-  function startBioStream(tabStream: MediaStream) {
-    const wsBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
-      .replace(/^https/, 'wss').replace(/^http/, 'ws');
-
-    const bioWs = new WebSocket(`${wsBase}/api/live/audio-stream`);
-    bioWsRef.current = bioWs;
-
-    bioWs.onopen = () => {
-      setBioConnected(true);
-
-      /**
-       * KEY FIX: MediaRecorder WebM streams only include the container
-       * header in the very first chunk. If we accumulate 250ms micro-chunks
-       * and re-combine them, librosa can't parse the blob (missing header).
-       *
-       * Solution: cycle a fresh MediaRecorder every 3 seconds.
-       * Each recorder.stop() triggers onstop with a COMPLETE WebM blob
-       * that includes the header — librosa can parse this correctly.
-       */
-      let isBioActive = true;
-
-      const runCycle = () => {
-        if (!isBioActive || bioWs.readyState !== WebSocket.OPEN) return;
-
-        const chunks: Blob[] = [];
-        let rec: MediaRecorder;
-        try {
-          rec = new MediaRecorder(tabStream, { mimeType: 'audio/webm;codecs=opus' });
-        } catch {
-          rec = new MediaRecorder(tabStream);
-        }
-        bioRecorderRef.current = rec;
-
-        rec.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data);
-        };
-
-        rec.onstop = async () => {
-          if (chunks.length === 0) { runCycle(); return; }
-          const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
-          if (blob.size > 500 && bioWs.readyState === WebSocket.OPEN) {
-            const buf = await blob.arrayBuffer();
-            bioWs.send(buf);
-          }
-          // Start the next 3-second cycle immediately
-          runCycle();
-        };
-
-        rec.start();   // collect everything into one blob
-
-        // Stop after 3 seconds → triggers onstop → sends complete WebM
-        bioFlushRef.current = setTimeout(() => {
-          if (rec.state === 'recording') rec.stop();
-        }, 3000) as unknown as ReturnType<typeof setInterval>;
-      };
-
-      runCycle();   // kick off the first cycle
-
-      // Store a flag so stopBioStream can halt cycling
-      (bioWs as any)._stopCycles = () => { isBioActive = false; };
-    };
-
-    bioWs.onmessage = (event) => {
-      try {
-        const data: BioPayload = JSON.parse(event.data);
-        const s = data.vocal_stress_score ?? 0;
-        setBioScore(s);
-        setBioTags(data.biomarker_tags ?? []);
-        setBioHistory(prev => [...prev.slice(-29), s]);
-      } catch { /* ignore */ }
-    };
-
-    bioWs.onerror = () => setBioConnected(false);
-    bioWs.onclose = () => setBioConnected(false);
-  }
-
-
-  function stopBioStream() {
-    // First, halt the cycling loop so onstop doesn't trigger runCycle again
-    if (bioWsRef.current && (bioWsRef.current as any)._stopCycles) {
-      (bioWsRef.current as any)._stopCycles();
-    }
-    bioFlushRef.current && clearTimeout(bioFlushRef.current as unknown as ReturnType<typeof setTimeout>);
-    if (bioRecorderRef.current?.state === 'recording') bioRecorderRef.current.stop();
-    if (bioWsRef.current?.readyState === WebSocket.OPEN) bioWsRef.current.close();
-    setBioConnected(false);
-    bioWsRef.current = null;
-    bioRecorderRef.current = null;
-  }
 
   // ── Main call start ───────────────────────────────────────────────────────
   const startCall = async () => {
@@ -151,6 +52,8 @@ export default function LiveCallPage() {
         tabStream.getTracks().forEach(t => t.stop());
         return;
       }
+
+      setVictimStream(tabStream);
 
       // 2. Officer mic
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -220,9 +123,6 @@ export default function LiveCallPage() {
         const victimLoop  = setupDeepgramStream(tabStream, 'Victim', language);
         const officerLoop = setupDeepgramStream(micStream, 'Officer', language);
         (ws as any).loops = [victimLoop, officerLoop];
-
-        // ✅ Start vocal biomarker stream immediately — stream is guaranteed alive here
-        startBioStream(tabStream);
       };
     } catch (err) {
       console.error('Failed to start live call:', err);
@@ -238,9 +138,8 @@ export default function LiveCallPage() {
       loops.forEach((l: any) => l?.stop?.());
       wsRef.current.close();
     }
-    // Stop biomarker stream
-    stopBioStream();
 
+    setVictimStream(null);
     if (stream) stream.getTracks().forEach(t => t.stop());
     setIsActive(false);
 
@@ -378,10 +277,7 @@ export default function LiveCallPage() {
 
             {/* Vocal Biomarkers — purely display, all logic in this file */}
             <VocalStressMonitor
-              score={bioScore}
-              tags={bioTags}
-              history={bioHistory}
-              connected={bioConnected}
+              victimStream={victimStream}
               isCallActive={isActive}
               compact
             />

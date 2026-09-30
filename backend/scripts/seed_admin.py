@@ -22,10 +22,10 @@ def seed():
         auth = AuthService()
         # Create demo users
         users_to_create = [
-            ("Admin User", "admin", "admin123", UserRole.ADMIN),
-            ("Counsellor User", "counsellor", "counsellor123", UserRole.COUNSELLOR),
-            ("Legal Officer", "legal", "legal123", UserRole.LEGAL_OFFICER),
-            ("Staff User", "officer1", "demo123", UserRole.AUTHORIZED_STAFF),
+            ("Admin User", "admin@nhaa.local", "admin123", UserRole.ADMIN),
+            ("Counsellor User", "counsellor@nhaa.local", "counsellor123", UserRole.COUNSELLOR),
+            ("Legal Officer", "legal@nhaa.local", "legal123", UserRole.LEGAL_OFFICER),
+            ("Staff User", "officer1@nhaa.local", "demo123", UserRole.AUTHORIZED_STAFF),
         ]
         for name, email, password, role in users_to_create:
             existing = db.query(User).filter(User.email == email).first()

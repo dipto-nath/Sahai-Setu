@@ -204,8 +204,12 @@ Provide a real-time JSON response with the following strictly formatted fields:
 }}
 """
             try:
+                # Local heuristic check first
+                from app.services.gemini_service import GeminiService
+                is_prank = GeminiService._looks_like_prank(full_transcript.lower())
+                
                 # Use Gemini client directly if available
-                if gemini_service.client:
+                if gemini_service.client and not is_prank:
                     logger.info(f"Calling Gemini API with model: {gemini_service.model_name}")
                     response = await gemini_service.client.aio.models.generate_content(
                         model=gemini_service.model_name,
@@ -215,12 +219,23 @@ Provide a real-time JSON response with the following strictly formatted fields:
                     logger.info(f"Gemini response received: {response.text[:200] if response.text else 'empty'}")
                     ai_data = json.loads(response.text)
                 else:
-                    # Mock response for demo mode
-                    ai_data = {
-                        "current_svi": 30,
-                        "guidance": ["Listen carefully to the caller", "Keep a calm tone"],
-                        "risk_detected": False
-                    }
+                    if is_prank:
+                        ai_data = {
+                            "current_svi": 5,
+                            "guidance": [
+                                "Summary: The caller is reporting a non-emergency or a prank.",
+                                "Care: No trauma-support routing required.",
+                                "Action: Mark as prank/spam and do not allocate officer resources."
+                            ],
+                            "risk_detected": False
+                        }
+                    else:
+                        # Mock response for demo mode
+                        ai_data = {
+                            "current_svi": 30,
+                            "guidance": ["Listen carefully to the caller", "Keep a calm tone"],
+                            "risk_detected": False
+                        }
             except Exception as e:
                 logger.error(f"Live Gemini Error: {type(e).__name__}: {e}")
                 # Fallback to simulated logic if API quota is exhausted or fails

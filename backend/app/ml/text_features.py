@@ -22,7 +22,7 @@ FEAR_PATTERNS = {
 }
 
 DISTRESS_PATTERNS = {
-    "en": [r"\b(distress|suffering|pain|agony|anguish|despair|trauma|unconscious|bleeding|blood|sos|injured|collapsed|fracture|broken|beaten|assaulted|tortured|lynched|hospitalized|icu)\b",
+    "en": [r"\b(distress|suffering|pain|agony|anguish|despair|trauma|unconscious|bleeding|blood|sos|injured|collapsed|fracture|broken|beaten|assaulted|tortured|lynched|hospitalized|icu|rape|sexual assault)\b",
            r"\b(help|helpless|hopeless|desperate|save me|emergency|crying|weeping|refused|jump|suicide|die|kill myself|end my life)\b"],
     "bn": [r"ব্যথা|কষ্ট|বেদনা|দুঃখ|নিরাশা|বাঁচাও|সাহায্য|বিপদ|মারা|আহত|রক্তপাত|অচেতন|জ্ঞান|লুটিয়ে|হাড়|মারধর|আক্রান্ত|নির্যাতন|লিঞ্চ|হাসপাতাল|আইসিইউ|ট্রমা|অসহায়|নিরুপায়|অস্বীকার"],
     "hi": [r"पीड़ा|कष्ट|वेदना|दुःख|निराशा|मदद|मदित|बचाओ|तकलीफ|दर्द|फंस|पस|घायल|खून|बेहोश|होश|गिरा|हड्डी|फ्रैक्चर|मारपीट|पीटा|हमला|प्रताड़ित|यातना|लिंचिंग|अस्पताल|आईसीयू|आघात|बेबस|लाचार|एफआईआर|मना"],
@@ -30,7 +30,7 @@ DISTRESS_PATTERNS = {
 
 THREAT_PATTERNS = {
     "en": [r"\b(threat|threaten|intimidat|coerc|blackmail|extort|abduct|kidnap|armed|attack|mob|violence|lynch|confinement|captive|boycott|eviction)\b",
-           r"\b(harm|hurt|kill|murder|abuse|assault|shoot|slur|rods|weapons|destroyed|fire)\b"],
+           r"\b(harm|hurt|kill|murder|abuse|assault|shoot|slur|rods|weapons|destroyed|fire|rape|sexual assault|caste)\b"],
     "bn": [r"ধমকি|ভয়াদলন|জবরদস্তি|খুন|হত্যা|মেরে|গুলি|অত্যাচার|হুমকি|অস্ত্র|সশস্ত্র|হিংস্র|জনতা|লিঞ্চ|অপহরণ|আটক|বন্দি|বয়কট|উচ্ছেদ|দখল|নষ্ট|পুড়িয়ে|বাধা"],
     "hi": [r"धमकी|भयादोहन|जबरदस्ती|खून|हत्या|मार|गोली|खत्म|मर|मढ़|जान|हथियार|भीड़|हिंसा|लिंचिंग|अगवा|अपहरण|बंधक|बहिष्कार|बेदखली|कब्जा|नष्ट|जला|गवाह"],
 }
@@ -56,6 +56,11 @@ REPETITION_PATTERNS = {
     "hi": [r"मदद मदद|जरूरी जरूरी|बचाओ बचाओ|जल्दी जल्दी|मदित मदित"],
 }
 
+EMERGENCY_BYPASS_PATTERNS = {
+    "en": [r"\b(rape|sexual assault|kill|murder|suicide|die|jump|gun|shoot|weapon|mob|lynch|blood|kidnap|abduct|attack|save me)\b"],
+    "bn": [r"খুন|হত্যা|মেরে|গুলি|অস্ত্র|জনতা|লিঞ্চ|রক্ত|বাঁচাও|ধর্ষণ|আত্মহত্যা"],
+    "hi": [r"खून|हत्या|मार|गोली|हथियार|भीड़|लिंचिंग|रक्त|बचाओ|बलात्कार|आत्महत्या"],
+}
 
 @dataclass
 class TextFeatureConfig:
@@ -65,6 +70,7 @@ class TextFeatureConfig:
     isolation_patterns: Dict[str, List[str]] = field(default_factory=lambda: ISOLATION_PATTERNS)
     urgency_patterns: Dict[str, List[str]] = field(default_factory=lambda: URGENCY_PATTERNS)
     repetition_patterns: Dict[str, List[str]] = field(default_factory=lambda: REPETITION_PATTERNS)
+    bypass_patterns: Dict[str, List[str]] = field(default_factory=lambda: EMERGENCY_BYPASS_PATTERNS)
     supported_languages: List[str] = field(default_factory=lambda: ["en", "bn", "hi"])
     max_score: float = 1.0
     min_score: float = 0.0
@@ -111,16 +117,25 @@ class TextFeatureExtractor:
                 "isolation": [re.compile(p, re.IGNORECASE) for p in self.config.isolation_patterns.get(lang, [])],
                 "urgency": [re.compile(p, re.IGNORECASE) for p in self.config.urgency_patterns.get(lang, [])],
                 "repetition": [re.compile(p, re.IGNORECASE) for p in self.config.repetition_patterns.get(lang, [])],
+                "bypass": [re.compile(p, re.IGNORECASE) for p in self.config.bypass_patterns.get(lang, [])],
             }
 
     def _count_matches(self, text: str, patterns) -> int:
         return sum(len(p.findall(text)) for p in patterns)
 
-    def _calculate_signal(self, text: str, patterns, text_length: int, max_expected: int = 5) -> float:
+    def _calculate_signal(self, text: str, patterns, text_length: int, max_expected: int = 5, is_bypassed: bool = False) -> float:
         if not patterns or text_length == 0:
             return 0.0
         matches = self._count_matches(text, patterns)
-        words = max(text_length / 5, 1)
+        if matches == 0:
+            return 0.0
+            
+        if is_bypassed:
+            # Waive length penalty: don't dilute the score based on length
+            words = 1
+        else:
+            words = max(text_length / 5, 1)
+            
         normalized = (matches / words) * 100
         score = math.log1p(normalized) / math.log1p(max_expected)
         return min(max(score, self.config.min_score), self.config.max_score)
@@ -139,12 +154,16 @@ class TextFeatureExtractor:
         text_length = len(text)
         lang = language if language in self.config.supported_languages else "en"
         patterns = self._compiled.get(lang, self._compiled["en"])
+        
+        # Check emergency bypass
+        is_bypassed = self._count_matches(text, patterns.get("bypass", [])) > 0
+        
         return TextFeatures(
-            fear_signal=self._calculate_signal(text, patterns["fear"], text_length),
-            distress_signal=self._calculate_signal(text, patterns["distress"], text_length),
-            threat_context_signal=self._calculate_signal(text, patterns["threat"], text_length),
-            isolation_signal=self._calculate_signal(text, patterns["isolation"], text_length),
-            urgency_signal=self._calculate_signal(text, patterns["urgency"], text_length),
+            fear_signal=self._calculate_signal(text, patterns["fear"], text_length, is_bypassed=is_bypassed),
+            distress_signal=self._calculate_signal(text, patterns["distress"], text_length, is_bypassed=is_bypassed),
+            threat_context_signal=self._calculate_signal(text, patterns["threat"], text_length, is_bypassed=is_bypassed),
+            isolation_signal=self._calculate_signal(text, patterns["isolation"], text_length, is_bypassed=is_bypassed),
+            urgency_signal=self._calculate_signal(text, patterns["urgency"], text_length, is_bypassed=is_bypassed),
             repetition_score=self._calculate_repetition(text, lang),
             text_length=text_length,
             language=language,

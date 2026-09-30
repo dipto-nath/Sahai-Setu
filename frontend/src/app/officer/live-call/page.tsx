@@ -75,6 +75,15 @@ export default function LiveCallPage() {
       };
 
       const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || '';
+      
+      if (!DEEPGRAM_API_KEY) {
+        alert("Deepgram API Key is missing. Please set NEXT_PUBLIC_DEEPGRAM_API_KEY in your .env.local file.");
+        tabStream.getTracks().forEach(t => t.stop());
+        micStream.getTracks().forEach(t => t.stop());
+        setIsActive(false);
+        return;
+      }
+
       const dialogueLog: { speaker: string; text: string }[] = [];
 
       const setupDeepgramStream = (audioStream: MediaStream, speakerLabel: 'Victim' | 'Officer', langCode: string) => {
